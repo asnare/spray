@@ -28,7 +28,7 @@ import Uri._
 
 /**
  * An immutable model of an internet URI as defined by http://tools.ietf.org/html/rfc3986.
- * All members of this class represent the *decoded* URI elements (i.e. without percent-encoding).
+ * All members of this class, except for `raw`, represent the *decoded* URI elements (i.e. without percent-encoding).
  */
 sealed abstract case class Uri(scheme: String, authority: Authority, path: Path, query: Query,
                                fragment: Option[String]) extends ToStringRenderable {
@@ -55,6 +55,8 @@ sealed abstract case class Uri(scheme: String, authority: Authority, path: Path,
     resolve(scheme, authority.userinfo, authority.host, authority.port, path, query, fragment, base)
 
   def render[R <: Rendering](r: R): r.type = render(r, UTF8)
+
+  def raw: String = toString
 
   /**
    * Renders this Uri into the given Renderer as defined by http://tools.ietf.org/html/rfc3986.
@@ -658,9 +660,20 @@ object Uri {
   private[http] def fail(summary: String, detail: String = "") =
     throw new IllegalUriException(ErrorInfo(summary, detail))
 
-  private[http] class Impl private (scheme: String, authority: Authority, path: Path, query: Query,
-                                    fragment: Option[String]) extends Uri(scheme, authority, path, query, fragment) {
+  private[http] class Impl(scheme: String, authority: Authority, path: Path, query: Query,
+                           fragment: Option[String]) extends Uri(scheme, authority, path, query, fragment) {
     def isEmpty = false
+  }
+
+  private[http] class RawImpl(scheme: String, authority: Authority, path: Path, query: Query,
+                              fragment: Option[String], rawUri: String)
+      extends Impl(scheme, authority, path, query, fragment) {
+
+    override def raw: String = rawUri
+
+    override def copy(scheme: String = scheme, authority: Authority = authority, path: Path = path,
+                      query: Query = query, fragment: Option[String] = fragment): Uri =
+      Impl(scheme, authority, path, query, fragment, raw)
   }
 
   private[http] object Impl {
@@ -670,5 +683,11 @@ object Uri {
     def apply(scheme: String, userinfo: String, host: Host, port: Int, path: Path, query: Query,
               fragment: Option[String]): Uri =
       apply(scheme, Authority(host, normalizePort(port, scheme), userinfo), path, query, fragment)
+    def apply(scheme: String, authority: Authority, path: Path, query: Query, fragment: Option[String], raw: String): Uri =
+      if (path.isEmpty && scheme.isEmpty && authority.isEmpty && query.isEmpty && fragment.isEmpty) Empty
+      else new RawImpl(scheme, authority, path, query, fragment, raw)
+    def apply(scheme: String, userinfo: String, host: Host, port: Int, path: Path, query: Query,
+              fragment: Option[String], raw: String): Uri =
+      apply(scheme, Authority(host, normalizePort(port, scheme), userinfo), path, query, fragment, raw)
   }
 }

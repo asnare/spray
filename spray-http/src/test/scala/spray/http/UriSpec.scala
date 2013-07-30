@@ -389,6 +389,16 @@ class UriSpec extends Specification {
       Uri(q.getOrElse("uri", "<nope>")) === uri
     }
 
+    "support obtaining the original unencoded URI when parsing" in {
+      // OAuth 2.0 http-mac specification example (query)
+      Uri("http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b&c2&a3=2+q").raw ===
+        "http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b&c2&a3=2+q"
+
+      // Encoded (non-normalized) path.
+      Uri("http://example.com/f%6f%6fbar").raw ===
+        "http://example.com/f%6f%6fbar"
+    }
+
     "produce proper error messages for illegal URIs" in {
       // illegal scheme
       Uri("foö:/a") must throwA {
