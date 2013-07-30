@@ -27,6 +27,7 @@ import HttpMethods._
 import HttpHeaders._
 import HttpProtocols._
 import StatusCodes._
+import Uri.{ Path, Query }
 
 class RequestParserSpec extends Specification {
   val testConf: Config = ConfigFactory.parseString("""
@@ -115,6 +116,21 @@ class RequestParserSpec extends Specification {
         request.toCharArray foreach { c ⇒ rawParse(parser)(c.toString) === Result.NeedMoreData }
         parse(parser)("DEFGH") === (PUT, Uri("/resource/yes"), `HTTP/1.1`, List(Host("x"), `Content-Length`(4)),
           "ABCD", "EFGH", false)
+      }
+
+      "with an encoded resource" in {
+        parse {
+          """GET /f%6f%6fbar?q=b%61z HTTP/1.1
+            |Host: example.com
+            |
+            |"""
+        } match {
+          case (_, uri: Uri, _, _, _, _, _) ⇒ {
+            uri.path === Path / "foobar"
+            uri.query === Query("q" -> "baz")
+            uri.raw === "/f%6f%6fbar?q=b%61z"
+          }
+        }
       }
     }
 
