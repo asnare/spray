@@ -23,11 +23,13 @@ import javax.servlet._
 import java.util
 import java.util.Locale
 import java.io.{ ByteArrayInputStream, BufferedReader }
+import java.net.{ URI ⇒ JUri }
 import java.security.Principal
 import scala.concurrent.duration.Duration
 import akka.event.NoLogging
 import spray.http._
 import HttpHeaders._
+import Uri.{ Query, Path }
 
 class ModelConverterSpec extends Specification with NoTimeConversions {
   implicit def noLogging = NoLogging
@@ -61,10 +63,20 @@ class ModelConverterSpec extends Specification with NoTimeConversions {
         ModelConverter.toHttpRequest(RequestMock(u)) === HttpRequest(uri = u)
       }
       "example 4" in {
+        implicit def s = settings
+        val u = "https://foo.bar/f%6f%6fbar?q=b%61z"
+        val convertedRequest = ModelConverter.toHttpRequest(RequestMock(u))
+        convertedRequest === HttpRequest(uri = u)
+        val uri = convertedRequest.uri
+        uri.path === Path / "foobar"
+        uri.query === Query("q" -> "baz")
+        uri.raw === "https://foo.bar/f%6f%6fbar?q=b%61z"
+      }
+      "example 5" in {
         implicit def s = settings.copy(rootPath = Uri.Path("/abc"))
         ModelConverter.toHttpRequest(RequestMock("https://foo.bar/abc/def")) === HttpRequest(uri = "https://foo.bar/def")
       }
-      "example 5" in {
+      "example 6" in {
         implicit def s = settings
         val c = "foobarbaz"
         ModelConverter.toHttpRequest {
@@ -73,13 +85,13 @@ class ModelConverterSpec extends Specification with NoTimeConversions {
             headers = "Content-Type" -> "text/plain" :: Nil)
         } === HttpRequest(entity = c, headers = textPlain :: Nil)
       }
-      "example 6" in {
+      "example 7" in {
         implicit def s = settings
         ModelConverter.toHttpRequest {
           RequestMock(content = "12345678901234567")
         } must throwAn[IllegalRequestException]
       }
-      "example 7" in {
+      "example 8" in {
         implicit def s = settings
         ModelConverter.toHttpRequest(RequestMock(headers = "Cookie" -> "foo=bar; bar=baz" :: Nil)) ===
           HttpRequest(headers = Cookie(HttpCookie("foo", "bar"), HttpCookie("bar", "baz")) :: Nil)
@@ -101,6 +113,8 @@ class ModelConverterSpec extends Specification with NoTimeConversions {
                          headers: Seq[(String, String)] = Nil) extends HttpServletRequest {
     import scala.collection.JavaConverters._
 
+    private val javaUri = new JUri(uri.raw)
+
     def getAuthType: String = ???
     def getCookies = ???
     def getDateHeader(name: String): Long = ???
@@ -113,13 +127,25 @@ class ModelConverterSpec extends Specification with NoTimeConversions {
     def getPathInfo: String = ???
     def getPathTranslated: String = ???
     def getContextPath: String = ???
-    def getQueryString: String = if (uri.query.isEmpty) null else uri.query.toString()
+    def getQueryString: String = javaUri.getRawQuery
     def getRemoteUser: String = ???
     def isUserInRole(role: String): Boolean = ???
     def getUserPrincipal: Principal = ???
     def getRequestedSessionId: String = ???
-    def getRequestURI: String = ???
-    def getRequestURL: StringBuffer = new StringBuffer(uri.copy(query = Uri.Query.Empty).toString)
+    def getRequestURI: String = {
+      val builder = new StringBuilder()
+      val scheme = javaUri.getScheme
+      if (scheme != null) {
+        builder.append(scheme).append(':')
+      }
+      builder.append(javaUri.getRawSchemeSpecificPart)
+      val query = javaUri.getRawQuery
+      if (query != null) {
+        builder.setLength(builder.length - query.length - 1)
+      }
+      builder.toString
+    }
+    def getRequestURL: StringBuffer = ???
     def getServletPath: String = ???
     def getSession(create: Boolean) = ???
     def getSession = ???

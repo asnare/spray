@@ -59,13 +59,13 @@ object ModelConverter {
       .getOrElse(throw new IllegalRequestException(MethodNotAllowed, ErrorInfo("Illegal HTTP method", name)))
 
   def rebuildUri(hsRequest: HttpServletRequest)(implicit settings: ConnectorSettings, log: LoggingAdapter): Uri = {
-    val buffer = hsRequest.getRequestURL
-    hsRequest.getQueryString match {
-      case null ⇒
-      case x    ⇒ buffer.append('?').append(x)
+    val requestUri = hsRequest.getRequestURI()
+    val rawUri = hsRequest.getQueryString match {
+      case null ⇒ requestUri
+      case x    ⇒ requestUri + '?' + x
     }
     try {
-      val uri = Uri(buffer.toString)
+      val uri = Uri(rawUri)
       if (settings.rootPath.isEmpty) uri
       else if (uri.path.startsWith(settings.rootPath)) uri.copy(path = uri.path.dropChars(settings.rootPathCharCount))
       else {
