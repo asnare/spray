@@ -56,6 +56,11 @@ sealed abstract case class Uri(scheme: String, authority: Authority, path: Path,
 
   def render[R <: Rendering](r: R): r.type = render(r, UTF8)
 
+  /**
+   * Returns the original unparsed representation from which this Uri was constructed.
+   * This is prior to path normalization and percent-decoding.
+   * (If this Uri was not constructed through parsing the value of `toString` is returned.)
+   */
   def raw: String = toString
 
   /**
