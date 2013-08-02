@@ -153,7 +153,7 @@ object Uri {
   def apply(scheme: String = "", authority: Authority = Authority.Empty, path: Path = Path.Empty,
             query: Query = Query.Empty, fragment: Option[String] = None): Uri = {
     val p = verifyPath(path, scheme, authority.host)
-    Impl(
+    create(
       scheme = normalizeScheme(scheme),
       authority = authority.normalizedFor(scheme),
       path = if (scheme.isEmpty) p else collapseDotSegments(p),
@@ -238,7 +238,7 @@ object Uri {
         }
       }
     }
-    Impl(_scheme, "", _host, _port, collapseDotSegments(path), query, fragment)
+    create(_scheme, "", _host, _port, collapseDotSegments(path), query, fragment)
   }
 
   case class Authority(host: Host, port: Int = 0, userinfo: String = "") extends ToStringRenderable {
@@ -526,7 +526,7 @@ object Uri {
       if (host.isEmpty)
         if (path.isEmpty) {
           val q = if (query.isEmpty) base.query else query
-          Impl(base.scheme, base.authority, base.path, q, fragment)
+          create(base.scheme, base.authority, base.path, q, fragment)
         } else {
           // http://tools.ietf.org/html/rfc3986#section-5.2.3
           def mergePaths(base: Uri, path: Path): Path =
@@ -541,10 +541,10 @@ object Uri {
               replaceLastSegment(base.path, path)
             }
           val p = if (path.startsWithSlash) path else mergePaths(base, path)
-          Impl(base.scheme, base.authority, collapseDotSegments(p), query, fragment)
+          create(base.scheme, base.authority, collapseDotSegments(p), query, fragment)
         }
-      else Impl(base.scheme, userinfo, host, port, collapseDotSegments(path), query, fragment)
-    else Impl(scheme, userinfo, host, port, collapseDotSegments(path), query, fragment)
+      else create(base.scheme, userinfo, host, port, collapseDotSegments(path), query, fragment)
+    else create(scheme, userinfo, host, port, collapseDotSegments(path), query, fragment)
   }
 
   private[http] def encode(r: Rendering, string: String, charset: Charset, keep: Int,
@@ -665,34 +665,27 @@ object Uri {
   private[http] def fail(summary: String, detail: String = "") =
     throw new IllegalUriException(ErrorInfo(summary, detail))
 
-  private[http] class Impl(scheme: String, authority: Authority, path: Path, query: Query,
-                           fragment: Option[String]) extends Uri(scheme, authority, path, query, fragment) {
-    def isEmpty = false
-  }
+  private[http] def create(scheme: String, userinfo: String, host: Host, port: Int, path: Path, query: Query,
+                           fragment: Option[String]): Uri =
+    create(scheme, Authority(host, normalizePort(port, scheme), userinfo), path, query, fragment)
 
-  private[http] class RawImpl(scheme: String, authority: Authority, path: Path, query: Query,
-                              fragment: Option[String], rawUri: String)
-      extends Impl(scheme, authority, path, query, fragment) {
+  private[http] def create(scheme: String, authority: Authority, path: Path, query: Query,
+                           fragment: Option[String]): Uri =
+    if (path.isEmpty && scheme.isEmpty && authority.isEmpty && query.isEmpty && fragment.isEmpty) Empty
+    else new Uri(scheme, authority, path, query, fragment) { def isEmpty = false }
 
-    override def raw: String = rawUri
+  private[http] def create(scheme: String, userinfo: String, host: Host, port: Int, path: Path, query: Query,
+                           fragment: Option[String], raw: String): Uri =
+    create(scheme, Authority(host, normalizePort(port, scheme), userinfo), path, query, fragment, raw)
 
-    override def copy(scheme: String = scheme, authority: Authority = authority, path: Path = path,
-                      query: Query = query, fragment: Option[String] = fragment): Uri =
-      Impl(scheme, authority, path, query, fragment, raw)
-  }
-
-  private[http] object Impl {
-    def apply(scheme: String, authority: Authority, path: Path, query: Query, fragment: Option[String]): Uri =
-      if (path.isEmpty && scheme.isEmpty && authority.isEmpty && query.isEmpty && fragment.isEmpty) Empty
-      else new Impl(scheme, authority, path, query, fragment)
-    def apply(scheme: String, userinfo: String, host: Host, port: Int, path: Path, query: Query,
-              fragment: Option[String]): Uri =
-      apply(scheme, Authority(host, normalizePort(port, scheme), userinfo), path, query, fragment)
-    def apply(scheme: String, authority: Authority, path: Path, query: Query, fragment: Option[String], raw: String): Uri =
-      if (path.isEmpty && scheme.isEmpty && authority.isEmpty && query.isEmpty && fragment.isEmpty) Empty
-      else new RawImpl(scheme, authority, path, query, fragment, raw)
-    def apply(scheme: String, userinfo: String, host: Host, port: Int, path: Path, query: Query,
-              fragment: Option[String], raw: String): Uri =
-      apply(scheme, Authority(host, normalizePort(port, scheme), userinfo), path, query, fragment, raw)
-  }
+  private[http] def create(scheme: String, authority: Authority, path: Path, query: Query, fragment: Option[String],
+                           _raw: String): Uri =
+    if (path.isEmpty && scheme.isEmpty && authority.isEmpty && query.isEmpty && fragment.isEmpty && _raw.isEmpty) Empty
+    else new Uri(scheme, authority, path, query, fragment) {
+      def isEmpty = false
+      override def raw = _raw
+      override def copy(scheme: String = scheme, authority: Authority = authority, path: Path = path,
+                        query: Query = query, fragment: Option[String] = fragment): Uri =
+        create(scheme, authority, path, query, fragment, _raw)
+    }
 }
